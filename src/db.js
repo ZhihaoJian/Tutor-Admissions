@@ -2,14 +2,15 @@
 const mysql = require("mysql");
 
 class DB {
-  connection;
+  pool;
 
   constructor() {
     this.init();
   }
 
   init() {
-    this.connection = mysql.createConnection({
+    this.pool = mysql.createPool({
+      connectionLimit: 10,
       host: "localhost",
       user: "root",
       password: "",
@@ -18,36 +19,37 @@ class DB {
   }
 
   connect(cb) {
-    this.connection.connect(err => {
+    this.pool.getConnection((err, connection) => {
       if (err) {
         console.log("连接mysql出现了问题：" + err.stack);
         this.end();
         return;
       } else {
-        console.log(`已连接上mysql，线程ID：${this.connection.threadId}`);
-        cb && cb();
+        console.log(`已连接上mysql，线程ID：${connection.threadId}`);
+        cb && cb(connection);
       }
     });
   }
 
   insert(sql, values) {
     if (!values) throw new Error("调用mysql插入出错");
-    const ist = () => {
+    const ist = (connection) => {
       console.log("开始执行插入语句：" + sql);
-      this.connection.query(sql, [values], function(err, results) {
+      connection.query(sql, [values], function(err, results) {
         if (err) {
-          this.end();
+          this.end(connection);
           throw err;
         }
         console.log("成功插入记录：" + results.affectedRows);
-        this.end();
+        // this.end(connection);
+        connection.release();
       });
     };
     this.connect(ist);
   }
 
-  end() {
-    this.connection.end();
+  end(connection) {
+    connection.release();
   }
 }
 

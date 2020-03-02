@@ -3,30 +3,11 @@ const puppeteer = require("puppeteer");
 const DB = require("./db");
 
 const db = new DB();
+const host = `http://muchong.com`;
 
-(async () => {
-  let pageIndex = 1;
-  let totalPage = 0;
-  const host = `http://muchong.com`;
-
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  const pageUrl = `${host}/f-430-${pageIndex}-threadtype-11`;
-
-  console.log(`开始请求URL：${pageUrl}`);
-  await page.goto(pageUrl);
-
-  //获取分页
-  const paginationText = await page.$eval(
-    "div.xmc_fr  table  tr > td:nth-child(2)",
-    el => el.textContent
-  );
-  if (paginationText) {
-    totalPage = Number(paginationText.split("/")[1]);
-  }
-
+async function parsePage() {
   //获取当前页的列表项中的标题、跳转地址和发布日期
-  const forum_body = await page.$$(".forum_body tbody");
+  const forum_body = await this.$$(".forum_body tbody");
   const data = [];
 
   for (let i = 0; i < forum_body.length; i++) {
@@ -47,9 +28,40 @@ const db = new DB();
 
   //批量插入到mysql
   db.insert(
-    "INSERT INTO paper_spider.tutor_admissions (title,redirectURL,date) VALUES ?",
+    "INSERT INTO paper_spider.tutor_admissions (`title`,`redirectURL`,`date`) VALUES ?",
     data
   );
+}
+
+function getUrl(index) {
+  return `${host}/f-430-${index}-threadtype-11`;
+}
+
+(async () => {
+  let pageIndex = 1;
+  let totalPage = 0;
+
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  const pageUrl = getUrl(pageIndex);
+
+  console.log(`开始请求URL：${pageUrl}`);
+  await page.goto(pageUrl);
+
+  //获取分页
+  const paginationText = await page.$eval(
+    "div.xmc_fr  table  tr > td:nth-child(2)",
+    el => el.textContent
+  );
+  if (paginationText) {
+    totalPage = Number(paginationText.split("/")[1]);
+  }
+
+  for (; pageIndex < totalPage; pageIndex++) {
+    await parsePage.call(page);
+    console.log(`开始请求URL：${getUrl(pageIndex + 1)}`);
+    await page.goto(getUrl(pageIndex + 1));
+  }
 
   //关闭浏览器
   await browser.close();
